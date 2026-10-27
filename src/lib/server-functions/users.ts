@@ -155,12 +155,41 @@ export const resetUserPassword = createServerFn({ method: "POST" })
 	.inputValidator((data: { userId: string; password: string }) => data)
 	.middleware([permissionsMiddleware])
 	.handler(async ({ data, context }) => {
-		if (context.role !== User.ROLES.SUPER_ADMIN) {
-			return Promise.reject({
-				message: "Unauthorized: SUPER_ADMIN role required",
-				source: "resetUserPassword",
-			});
+		const reject = (message: string) =>
+			Promise.reject({ message, source: "resetUserPassword" });
+
+		if (!context.userId) return reject("Unauthorized");
+
+		const allowedIds = (process.env.PASSWORD_RESET_USER_IDS ?? "")
+			.split(",")
+			.map((s) => s.trim())
+			.filter(Boolean);
+
+		const isSuper = context.role === User.ROLES.SUPER_ADMIN;
+		const isAllowedAdmin =
+			context.role === User.ROLES.ADMIN &&
+			allowedIds.includes(context.userId);
+
+		if (!isSuper && !isAllowedAdmin) {
+			return reject("Unauthorized");
 		}
 
-		return await User.API.updatePassword(data.userId, data.password);
+		if (data.password.length < 12) {
+			return reject("Password must be at least 12 characters");
+		}
+
+		const target = await User.API.getById(data.userId);
+		if (!target) return reject("User not found");
+
+		if (!isSuper && target.role === User.ROLES.SUPER_ADMIN) {
+			return reject("Cannot reset a super admin's password");
+		}
+
+		const id = await User.API.updatePassword(data.userId, data.password);
+
+		console.info(
+			`[resetUserPassword] by=${context.userId} target=${data.userId} at=${new Date().toISOString()}`,
+		);
+
+		return id;
 	});
