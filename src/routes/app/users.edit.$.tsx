@@ -141,12 +141,13 @@ export const Route = createFileRoute("/app/users/edit/$")({
       clinics: Result.getOrElse(await getAllClinics(), []),
       currentUserId: await getCurrentUserId(),
       isSuperAdmin: await currentUserHasRole({ data: { role: "super_admin" } }),
+      isAdmin: await currentUserHasRole({ data: { role: "admin" } }),
     };
   },
 });
 
 function RouteComponent() {
-  const { user, clinics, currentUserId, isSuperAdmin } = Route.useLoaderData();
+  const { user, clinics, currentUserId, isSuperAdmin, isAdmin } = Route.useLoaderData();
   const navigate = Route.useNavigate();
   const userId = Route.useParams()._splat;
   const isEditMode = Boolean(userId && user);
@@ -423,7 +424,7 @@ function RouteComponent() {
         <hr className="my-8" />
       </div>
 
-      <If show={isEditMode && isSuperAdmin && user !== null}>
+      <If show={isEditMode && (isSuperAdmin || isAdmin) && user !== null}>
         <UserPasswordResetForm userId={user?.id || ""} />
       </If>
     </div>
@@ -490,7 +491,7 @@ function UserPasswordResetForm({ userId }: { userId: string }) {
         })
         .catch((error) => {
           console.error("Failed to reset password:", error);
-          toast.error("Failed to reset password");
+          toast.error(error?.message ?? "Failed to reset password");
         })
         .finally(() => {
           setIsSubmitting(false);
